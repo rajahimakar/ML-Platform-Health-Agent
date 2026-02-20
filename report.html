@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>ML Platform Health Report — {{ generated_date }}</title>
+<style>
+  :root {
+    --healthy:  #1a7a3a; --healthy-lt: #e6f4ec;
+    --warning:  #b45309; --warning-lt: #fef3c7;
+    --critical: #991b1b; --critical-lt: #fee2e2;
+    --error:    #6b21a8; --error-lt:   #f3e8ff;
+    --bg: #f3f5f0; --surface: #fff; --text: #1a1f18; --muted: #566052;
+    --border: #d8ddd3; --mono: 'JetBrains Mono', 'Courier New', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Segoe UI', sans-serif; font-size: 14px; }
+
+  .header { background: #0d0f0e; color: #cdd9c5; padding: 2rem 2.5rem; border-bottom: 3px solid {{ status_color }}; }
+  .header-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+  .header h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.3rem; }
+  .header .sub { font-family: var(--mono); font-size: 0.72rem; color: #5a7055; }
+  .status-badge { padding: 0.4rem 1.2rem; border-radius: 4px; font-family: var(--mono); font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; background: {{ status_color }}; color: #fff; white-space: nowrap; }
+
+  .container { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  /* HEADLINE */
+  .headline-card { background: var(--surface); border: 1.5px solid var(--border); border-left: 4px solid {{ status_color }}; border-radius: 6px; padding: 1.2rem 1.5rem; margin-bottom: 1.5rem; font-size: 1rem; color: var(--text); line-height: 1.6; }
+
+  /* SOURCE STATUS ROW */
+  .sources-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 0.8rem; margin-bottom: 1.5rem; }
+  .source-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: 6px; padding: 1rem; text-align: center; }
+  .source-name { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem; }
+  .source-status { font-family: var(--mono); font-size: 0.78rem; font-weight: 600; padding: 0.25rem 0.6rem; border-radius: 3px; display: inline-block; }
+  .s-healthy  { background: var(--healthy-lt);  color: var(--healthy);  }
+  .s-warning  { background: var(--warning-lt);  color: var(--warning);  }
+  .s-critical { background: var(--critical-lt); color: var(--critical); }
+  .s-error    { background: var(--error-lt);    color: var(--error);    }
+
+  /* SECTION */
+  .section { margin-bottom: 2rem; }
+  .section-title { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.6rem; }
+  .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* NARRATIVE */
+  .narrative { background: var(--surface); border: 1.5px solid var(--border); border-radius: 6px; padding: 1.5rem; color: var(--muted); line-height: 1.9; font-size: 0.9rem; }
+  .narrative p + p { margin-top: 0.9rem; }
+
+  /* ANOMALIES */
+  .anomaly { background: var(--surface); border: 1.5px solid var(--border); border-radius: 6px; padding: 1rem 1.2rem; margin-bottom: 0.6rem; display: flex; gap: 1rem; align-items: flex-start; }
+  .anomaly.critical { border-left: 4px solid var(--critical); }
+  .anomaly.warning  { border-left: 4px solid var(--warning); }
+  .anomaly.info     { border-left: 4px solid #3b82f6; }
+  .anomaly-badge { font-family: var(--mono); font-size: 0.62rem; font-weight: 600; text-transform: uppercase; padding: 0.2rem 0.5rem; border-radius: 3px; flex-shrink: 0; margin-top: 2px; }
+  .b-critical { background: var(--critical-lt); color: var(--critical); }
+  .b-warning  { background: var(--warning-lt);  color: var(--warning); }
+  .b-info     { background: #dbeafe; color: #1d4ed8; }
+  .anomaly-content {}
+  .anomaly-title  { font-weight: 600; font-size: 0.88rem; margin-bottom: 0.3rem; }
+  .anomaly-detail { color: var(--muted); font-size: 0.82rem; line-height: 1.6; }
+  .anomaly-source { font-family: var(--mono); font-size: 0.62rem; color: #94a3b8; margin-top: 0.3rem; }
+
+  /* ACTIONS */
+  .action { background: var(--surface); border: 1.5px solid var(--border); border-radius: 6px; padding: 1rem 1.2rem; margin-bottom: 0.6rem; display: flex; gap: 1rem; align-items: flex-start; }
+  .action-num { background: #0d0f0e; color: #39d353; font-family: var(--mono); font-size: 0.78rem; font-weight: 700; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .action-content {}
+  .action-title { font-weight: 600; font-size: 0.88rem; margin-bottom: 0.3rem; }
+  .action-rationale { color: var(--muted); font-size: 0.82rem; line-height: 1.6; }
+  .action-owner { font-family: var(--mono); font-size: 0.65rem; color: #94a3b8; margin-top: 0.4rem; }
+
+  /* FOOTER */
+  .report-footer { text-align: center; font-family: var(--mono); font-size: 0.65rem; color: var(--muted); padding: 1.5rem; border-top: 1px solid var(--border); margin-top: 2rem; }
+
+  @media(max-width:600px){
+    .sources-row { grid-template-columns: 1fr 1fr; }
+    .header { padding: 1.2rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div>
+      <h1>ML Platform Health Report</h1>
+      <div class="sub">Generated: {{ generated_at }} &nbsp;·&nbsp; Collected: {{ collected_at }}</div>
+    </div>
+    <div class="status-badge">{{ overall_status }}</div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- HEADLINE -->
+  <div class="headline-card">{{ headline }}</div>
+
+  <!-- SOURCE STATUSES -->
+  <div class="sources-row">
+    {% for src, status in source_statuses.items() %}
+    <div class="source-card">
+      <div class="source-name">{{ src.replace('_', ' ') }}</div>
+      <span class="source-status s-{{ status }}">{{ status }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- NARRATIVE -->
+  <div class="section">
+    <div class="section-title">Executive Summary</div>
+    <div class="narrative">
+      {% for para in narrative_paragraphs %}
+      <p>{{ para }}</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ANOMALIES -->
+  {% if anomalies %}
+  <div class="section">
+    <div class="section-title">Anomalies Detected ({{ anomalies|length }})</div>
+    {% for a in anomalies %}
+    <div class="anomaly {{ a.severity }}">
+      <span class="anomaly-badge b-{{ a.severity }}">{{ a.severity }}</span>
+      <div class="anomaly-content">
+        <div class="anomaly-title">{{ a.title }}</div>
+        <div class="anomaly-detail">{{ a.detail }}</div>
+        <div class="anomaly-source">source: {{ a.source }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- RECOMMENDED ACTIONS -->
+  {% if recommended_actions %}
+  <div class="section">
+    <div class="section-title">Recommended Actions</div>
+    {% for action in recommended_actions %}
+    <div class="action">
+      <div class="action-num">{{ action.priority }}</div>
+      <div class="action-content">
+        <div class="action-title">{{ action.action }}</div>
+        <div class="action-rationale">{{ action.rationale }}</div>
+        <div class="action-owner">Owner: {{ action.owner }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div>
+
+<div class="report-footer">
+  ML Platform Health Agent &nbsp;·&nbsp; Auto-generated &nbsp;·&nbsp; {{ generated_at }}
+</div>
+
+</body>
+</html>
